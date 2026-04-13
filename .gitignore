@@ -1,0 +1,51 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+terraform.tfvars
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Kubernetes
+*.kubeconfig
+*.secret.yaml
+
+# Local data
+*.pkl
+*.joblib
+*.db
+*.sqlite
+/data/
+/tmp/
+
+# Docker
+*.log
+.env
+
+# Secrets
+*.key
+*.pem
+*.crt
