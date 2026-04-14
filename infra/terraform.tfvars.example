@@ -1,0 +1,7 @@
+# Example variables file - copy to terraform.tfvars and fill your values
+cloud_id   = "b1gXXXXXXXXXX"
+folder_id  = "b1gXXXXXXXXXX"
+zone       = "ru-central1-a"
+yc_token   = "AQAAAA...your_token..."
+project_name = "mlops"
+service_account_id = "ajeXXXXXXXXXX"

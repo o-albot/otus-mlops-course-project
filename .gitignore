@@ -49,3 +49,4 @@ htmlcov/
 *.key
 *.pem
 *.crt
+k8s/s3-secret.yaml
