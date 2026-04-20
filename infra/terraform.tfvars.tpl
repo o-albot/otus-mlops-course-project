@@ -1,0 +1,10 @@
+cloud_id   = "${YC_CLOUD_ID}"
+folder_id  = "${YC_FOLDER_ID}"
+zone       = "${YC_ZONE}"
+yc_token   = "${YC_TOKEN}"
+project_name = "${PROJECT_NAME}"
+cluster_version = "${K8S_VERSION}"
+node_cores = ${NODE_CORES}
+node_memory = ${NODE_MEMORY}
+node_count = ${NODE_COUNT}
+service_account_id = "${YC_SERVICE_ACCOUNT_ID}"

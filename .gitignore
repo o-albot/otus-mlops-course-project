@@ -50,3 +50,16 @@ htmlcov/
 *.pem
 *.crt
 k8s/s3-secret.yaml
+
+# Terraform
+infra/terraform.tfvars
+infra/.terraform/
+infra/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# Environment variables
+.env
+
+# Local kubeconfig
+.kubeconfig
