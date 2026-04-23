@@ -1,4 +1,6 @@
 .PHONY: help init plan apply destroy clean kubeconfig status check-nodes generate-secret save-outputs
+.PHONY: deploy deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
+.PHONY: deploy-force status-apps urls delete-apps upload-data list-data
 
 help:
 	@echo "Commands:"
@@ -11,6 +13,20 @@ help:
 	@echo "  make check-nodes   - Check cluster nodes"
 	@echo "  make status        - Show infrastructure status"
 	@echo "  make generate-secret - Generate s3-secret.yaml"
+	@echo "  make upload-data   - Upload data to S3"
+	@echo "  make list-data     - List data in S3"
+	@echo ""
+	@echo "Deploy commands:"
+	@echo "  make deploy        - Deploy all applications"
+	@echo "  make deploy-namespace - Create namespace"
+	@echo "  make deploy-secret - Deploy S3 secret"
+	@echo "  make deploy-postgres - Deploy PostgreSQL"
+	@echo "  make deploy-mlflow - Deploy MLflow"
+	@echo "  make deploy-airflow - Deploy Airflow"
+	@echo "  make deploy-force  - Force recreate all deployments"
+	@echo "  make status-apps   - Show applications status"
+	@echo "  make urls          - Show external URLs"
+	@echo "  make delete-apps   - Delete all applications"
 
 init:
 	cd infra && terraform init
@@ -47,20 +63,20 @@ save-outputs:
 generate-secret:
 	@echo "Generating k8s/s3-secret.yaml..."
 	@if [ -f .env ]; then \
-		. ./.env; \
-		export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BUCKET_NAME; \
-		envsubst < k8s/s3-secret.template.yaml > k8s/s3-secret.yaml; \
-		echo "✅ k8s/s3-secret.yaml generated"; \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BUCKET_NAME; \
+	envsubst < k8s/s3-secret.template.yaml > k8s/s3-secret.yaml; \
+	echo "✅ k8s/s3-secret.yaml generated"; \
 	else \
-		echo "❌ .env file not found"; \
+	echo "❌ .env file not found"; \
 	fi
 
 kubeconfig:
 	@CLUSTER_ID=$$(grep '^CLUSTER_ID=' .env | cut -d= -f2 | tr -d ' '); \
 	if [ -n "$$CLUSTER_ID" ]; then \
-		yc managed-kubernetes cluster get-credentials $$CLUSTER_ID --external --force; \
+	yc managed-kubernetes cluster get-credentials $$CLUSTER_ID --external --force; \
 	else \
-		echo "CLUSTER_ID not found in .env"; \
+	echo "CLUSTER_ID not found in .env"; \
 	fi
 
 check-nodes:
@@ -68,10 +84,115 @@ check-nodes:
 
 status:
 	@if [ -f .env ]; then \
-		echo "Project: $$(grep '^PROJECT_NAME=' .env | cut -d= -f2)"; \
-		echo "Bucket: $$(grep '^BUCKET_NAME=' .env | cut -d= -f2)"; \
-		echo "Cluster: $$(grep '^CLUSTER_NAME=' .env | cut -d= -f2)"; \
-		echo "Cluster ID: $$(grep '^CLUSTER_ID=' .env | cut -d= -f2)"; \
+	echo "================================"; \
+	echo "Infrastructure Status"; \
+	echo "================================"; \
+	echo "Project: $$(grep '^PROJECT_NAME=' .env | cut -d= -f2)"; \
+	echo "Bucket: $$(grep '^BUCKET_NAME=' .env | cut -d= -f2)"; \
+	echo "Cluster: $$(grep '^CLUSTER_NAME=' .env | cut -d= -f2)"; \
+	echo "Cluster ID: $$(grep '^CLUSTER_ID=' .env | cut -d= -f2)"; \
+	echo "================================"; \
 	else \
-		echo "No .env file found"; \
+	echo "No .env file found"; \
 	fi
+
+upload-data:
+	@echo "Uploading data to S3..."
+	@if [ -f .env ]; then \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+	echo "Bucket: $$BUCKET_NAME"; \
+	s3cmd put data/cloud_query_dataset.csv s3://$$BUCKET_NAME/data/cloud_query_dataset.csv; \
+	echo "✅ Data uploaded to s3://$$BUCKET_NAME/data/cloud_query_dataset.csv"; \
+	else \
+	echo "❌ .env file not found"; \
+	fi
+
+list-data:
+	@echo "Listing data in S3..."
+	@if [ -f .env ]; then \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+	s3cmd ls s3://$$BUCKET_NAME/data/; \
+	else \
+	echo "❌ .env file not found"; \
+	fi
+
+deploy: deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
+	@echo "✅ All applications deployed successfully!"
+	@$(MAKE) status-apps
+
+deploy-namespace:
+	@echo "Creating namespace mlops..."
+	kubectl create namespace mlops --dry-run=client -o yaml | kubectl apply -f -
+	@echo "✅ Namespace created"
+
+deploy-secret:
+	@echo "Deploying S3 secret..."
+	kubectl apply -f k8s/s3-secret.yaml
+	@echo "✅ S3 secret deployed"
+
+deploy-postgres:
+	@echo "Deploying PostgreSQL..."
+	kubectl apply -f k8s/postgres.yaml
+	@echo "✅ PostgreSQL deployed"
+	@echo "Waiting for PostgreSQL to be ready..."
+	kubectl wait --for=condition=ready pod -l app=postgres -n mlops --timeout=60s 2>/dev/null || true
+
+deploy-mlflow:
+	@echo "Deploying MLflow..."
+	kubectl apply -f k8s/mlflow.yaml
+	@echo "✅ MLflow deployed"
+	@echo "Waiting for MLflow to be ready..."
+	kubectl wait --for=condition=ready pod -l app=mlflow -n mlops --timeout=60s 2>/dev/null || true
+
+deploy-airflow:
+	@echo "Deploying Airflow..."
+	kubectl apply -f k8s/airflow.yaml
+	@echo "✅ Airflow deployed"
+	@echo "Waiting for Airflow to be ready..."
+	kubectl wait --for=condition=ready pod -l app=airflow -n mlops --timeout=120s 2>/dev/null || true
+
+deploy-force: deploy-namespace deploy-secret
+	@echo "Force recreating deployments..."
+	kubectl delete deployment postgres -n mlops --ignore-not-found
+	kubectl delete deployment mlflow -n mlops --ignore-not-found
+	kubectl delete deployment airflow -n mlops --ignore-not-found
+	sleep 5
+	$(MAKE) deploy-postgres
+	$(MAKE) deploy-mlflow
+	$(MAKE) deploy-airflow
+	@echo "✅ All applications re-deployed"
+
+status-apps:
+	@echo ""
+	@echo "================================"
+	@echo "Applications Status"
+	@echo "================================"
+	@echo "Pods in mlops namespace:"
+	@kubectl get pods -n mlops
+	@echo ""
+	@echo "Services in mlops namespace:"
+	@kubectl get svc -n mlops
+	@echo ""
+	@echo "External IPs:"
+	@kubectl get svc -n mlops | grep LoadBalancer || echo "  No LoadBalancer services yet"
+
+urls:
+	@echo "================================"
+	@echo "External URLs"
+	@echo "================================"
+	@echo "MLflow: http://$$(kubectl get svc -n mlops mlflow -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null):5000"
+	@echo "Airflow: http://$$(kubectl get svc -n mlops airflow -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null):8080"
+	@echo "(Login: admin / admin)"
+
+delete-apps:
+	@echo "Deleting all applications..."
+	kubectl delete deployment postgres -n mlops --ignore-not-found
+	kubectl delete deployment mlflow -n mlops --ignore-not-found
+	kubectl delete deployment airflow -n mlops --ignore-not-found
+	kubectl delete service postgres -n mlops --ignore-not-found
+	kubectl delete service mlflow -n mlops --ignore-not-found
+	kubectl delete service airflow -n mlops --ignore-not-found
+	kubectl delete secret s3-credentials -n mlops --ignore-not-found
+	@echo "✅ All applications deleted"
