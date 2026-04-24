@@ -1,4 +1,4 @@
-.PHONY: help init plan apply destroy clean kubeconfig status check-nodes generate-secret save-outputs
+.PHONY: help init plan apply destroy clean kubeconfig status check-nodes generate-secret save-outputs upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket deploy-to-s3
 .PHONY: deploy deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
 .PHONY: deploy-force status-apps urls delete-apps upload-data list-data
 
@@ -13,7 +13,10 @@ help:
 	@echo "  make check-nodes   - Check cluster nodes"
 	@echo "  make status        - Show infrastructure status"
 	@echo "  make generate-secret - Generate s3-secret.yaml"
-	@echo "  make upload-data   - Upload data to S3"
+	@echo "  upload-venv-to-bucket   - Upload venv to S3"
+	@echo "  upload-data-to-bucket   - Upload data to S3"
+	@echo "  upload-src-to-bucket    - Upload src to S3"
+	@echo "  deploy-to-s3            - Upload all to S3"
 	@echo "  make list-data     - List data in S3"
 	@echo ""
 	@echo "Deploy commands:"
@@ -96,17 +99,17 @@ status:
 	echo "No .env file found"; \
 	fi
 
-upload-data:
-	@echo "Uploading data to S3..."
-	@if [ -f .env ]; then \
-	. ./.env; \
-	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
-	echo "Bucket: $$BUCKET_NAME"; \
-	s3cmd put data/cloud_query_dataset.csv s3://$$BUCKET_NAME/data/cloud_query_dataset.csv; \
-	echo "✅ Data uploaded to s3://$$BUCKET_NAME/data/cloud_query_dataset.csv"; \
-	else \
-	echo "❌ .env file not found"; \
-	fi
+#upload-data:
+#	@echo "Uploading data to S3..."
+#	@if [ -f .env ]; then \
+#	. ./.env; \
+#	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+#	echo "Bucket: $$BUCKET_NAME"; \
+#	s3cmd put data/cloud_query_dataset.csv s3://$$BUCKET_NAME/data/cloud_query_dataset.csv; \
+#	echo "✅ Data uploaded to s3://$$BUCKET_NAME/data/cloud_query_dataset.csv"; \
+#	else \
+#	echo "❌ .env file not found"; \
+#	fi
 
 list-data:
 	@echo "Listing data in S3..."
@@ -117,6 +120,46 @@ list-data:
 	else \
 	echo "❌ .env file not found"; \
 	fi
+
+
+# ========== VIRTUAL ENVIRONMENT ==========
+
+upload-venv-to-bucket:
+	@echo "Uploading venv.tar.gz to S3 bucket..."
+	@source .env && \
+	s3cmd --host $$S3_ENDPOINT_URL \
+	  --access_key $$S3_ACCESS_KEY \
+	  --secret_key $$S3_SECRET_KEY \
+	  put venvs/venv.tar.gz s3://$$S3_BUCKET_NAME/venvs/
+	@echo "venv.tar.gz uploaded to s3://$$S3_BUCKET_NAME/venvs/"
+
+# ========== DATA ==========
+
+upload-data-to-bucket:
+	@echo "Uploading data to S3 bucket..."
+	@source .env && \
+	s3cmd --host $$S3_ENDPOINT_URL \
+	  --access_key $$S3_ACCESS_KEY \
+	  --secret_key $$S3_SECRET_KEY \
+	  put data/cloud_query_dataset.csv s3://$$S3_BUCKET_NAME/data/
+	@echo "Data uploaded to s3://$$S3_BUCKET_NAME/data/cloud_query_dataset.csv"
+
+# ========== SOURCE CODE ==========
+
+upload-src-to-bucket:
+	@echo "Uploading source code to S3 bucket..."
+	@source .env && \
+	s3cmd --host $$S3_ENDPOINT_URL \
+	  --access_key $$S3_ACCESS_KEY \
+	  --secret_key $$S3_SECRET_KEY \
+	  sync src/ s3://$$S3_BUCKET_NAME/src/
+	@echo "Source code uploaded to s3://$$S3_BUCKET_NAME/src/"
+
+# ========== FULL DEPLOY TO S3 ==========
+
+deploy-to-s3: upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket
+	@echo "All artifacts (venv, data, src) uploaded to S3!"
+
 
 deploy: deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
 	@echo "✅ All applications deployed successfully!"
