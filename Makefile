@@ -101,24 +101,17 @@ status:
 	echo "No .env file found"; \
 	fi
 
-#upload-data:
-#	@echo "Uploading data to S3..."
-#	@if [ -f .env ]; then \
-#	. ./.env; \
-#	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
-#	echo "Bucket: $$BUCKET_NAME"; \
-#	s3cmd put data/cloud_query_dataset.csv s3://$$BUCKET_NAME/data/cloud_query_dataset.csv; \
-#	echo "✅ Data uploaded to s3://$$BUCKET_NAME/data/cloud_query_dataset.csv"; \
-#	else \
-#	echo "❌ .env file not found"; \
-#	fi
+# ========== FULL DEPLOY TO S3 ==========
+
+deploy-to-s3: upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket list-data
+	@echo "All artifacts (venv, data, src) uploaded to S3!"
 
 list-data:
 	@echo "Listing data in S3..."
 	@if [ -f .env ]; then \
 	. ./.env; \
 	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
-	s3cmd ls s3://$$BUCKET_NAME/data/; \
+	s3cmd ls s3://$$BUCKET_NAME/; \
 	else \
 	echo "❌ .env file not found"; \
 	fi
@@ -127,41 +120,44 @@ list-data:
 # ========== VIRTUAL ENVIRONMENT ==========
 
 upload-venv-to-bucket:
-	@echo "Uploading venv.tar.gz to S3 bucket..."
-	@source .env && \
-	s3cmd --host $$S3_ENDPOINT_URL \
-	  --access_key $$S3_ACCESS_KEY \
-	  --secret_key $$S3_SECRET_KEY \
-	  put venvs/venv.tar.gz s3://$$S3_BUCKET_NAME/venvs/
-	@echo "venv.tar.gz uploaded to s3://$$S3_BUCKET_NAME/venvs/"
+	@echo "Uploading venv to S3..."
+	@if [ -f .env ]; then \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+	echo "Bucket: $$BUCKET_NAME"; \
+	s3cmd put venvs/venv.tar.gz s3://$$BUCKET_NAME/venvs/; \
+	echo "✅ venv.tar.gz uploaded to s3://$$S3_BUCKET_NAME/venvs/"; \
+	else \
+	echo "❌ .env file not found"; \
+	fi
 
 # ========== DATA ==========
 
 upload-data-to-bucket:
-	@echo "Uploading data to S3 bucket..."
-	@source .env && \
-	s3cmd --host $$S3_ENDPOINT_URL \
-	  --access_key $$S3_ACCESS_KEY \
-	  --secret_key $$S3_SECRET_KEY \
-	  put data/cloud_query_dataset.csv s3://$$S3_BUCKET_NAME/data/
-	@echo "Data uploaded to s3://$$S3_BUCKET_NAME/data/cloud_query_dataset.csv"
+	@echo "Uploading data to S3..."
+	@if [ -f .env ]; then \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+	echo "Bucket: $$BUCKET_NAME"; \
+	s3cmd sync data/ s3://$$BUCKET_NAME/data/; \
+	echo "✅ Data uploaded to s3://$$S3_BUCKET_NAME/data/"; \
+	else \
+	echo "❌ .env file not found"; \
+	fi
 
 # ========== SOURCE CODE ==========
 
 upload-src-to-bucket:
-	@echo "Uploading source code to S3 bucket..."
-	@source .env && \
-	s3cmd --host $$S3_ENDPOINT_URL \
-	  --access_key $$S3_ACCESS_KEY \
-	  --secret_key $$S3_SECRET_KEY \
-	  sync src/ s3://$$S3_BUCKET_NAME/src/
-	@echo "Source code uploaded to s3://$$S3_BUCKET_NAME/src/"
-
-# ========== FULL DEPLOY TO S3 ==========
-
-deploy-to-s3: upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket
-	@echo "All artifacts (venv, data, src) uploaded to S3!"
-
+	@echo "Uploading source code to S3..."
+	@if [ -f .env ]; then \
+	. ./.env; \
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; \
+	echo "Bucket: $$BUCKET_NAME"; \
+	s3cmd sync src/ s3://$$BUCKET_NAME/src/; \
+	echo "✅ Source code uploaded to s3://$$S3_BUCKET_NAME/src/"; \
+	else \
+	echo "❌ .env file not found"; \
+	fi
 
 # ========== AIRFLOW VARIABLES ==========
 

@@ -23,10 +23,10 @@ DP_SECURITY_GROUP_ID=$(terraform output -raw dp_security_group_id 2>/dev/null)
 cd ..
 
 # Получить YC_SSH_PUBLIC_KEY из локального файла (если существует)
-if [ -f ~/.ssh/id_rsa.pub ]; then
-    YC_SSH_PUBLIC_KEY=$(cat ~/.ssh/id_rsa.pub)
+if [ -f ~/.ssh/id_ed25519.pub ]; then
+    YC_SSH_PUBLIC_KEY=$(cat ~/.ssh/id_ed25519.pub)
 else
-    echo -e "${YELLOW}Warning: ~/.ssh/id_rsa.pub not found. Please provide SSH public key manually.${NC}"
+    echo -e "${YELLOW}Warning: ~/.ssh/id_ed25519.pu not found. Please provide SSH public key manually.${NC}"
     YC_SSH_PUBLIC_KEY=""
 fi
 
