@@ -62,4 +62,5 @@ infra/.terraform.lock.hcl
 .env
 
 # Local kubeconfig
-.kubeconfig
+.kubeconfigvenvs/
+*.tar.gz
