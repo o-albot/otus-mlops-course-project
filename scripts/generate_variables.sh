@@ -3,12 +3,13 @@
 # Цвета для вывода
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+NC='\033[0m'
 
 echo -e "${YELLOW}Generating variables.json from Terraform outputs and K8s services...${NC}"
 
 # Перейти в директорию infra для получения outputs
-cd infra
+cd infra || exit 1
 
 # Получить значения из Terraform outputs
 YC_ZONE=$(terraform output -raw yc_zone 2>/dev/null)
@@ -16,26 +17,28 @@ YC_FOLDER_ID=$(terraform output -raw yc_folder_id 2>/dev/null)
 YC_SUBNET_ID=$(terraform output -raw subnet_id 2>/dev/null)
 DP_SA_ID=$(terraform output -raw dp_service_account_id 2>/dev/null)
 DP_SA_AUTH_KEY_PUBLIC_KEY=$(terraform output -raw dp_public_ssh_key 2>/dev/null)
-DP_SA_JSON=$(terraform output -json dp_service_account_json 2>/dev/null | jq -c .)
 DP_SECURITY_GROUP_ID=$(terraform output -raw dp_security_group_id 2>/dev/null)
+
+# Получить JSON как строку (сохраняя формат)
+DP_SA_JSON=$(terraform output -json dp_service_account_json 2>/dev/null)
 
 # Вернуться в корень проекта
 cd ..
 
-# Получить YC_SSH_PUBLIC_KEY из локального файла (если существует)
-if [ -f ~/.ssh/id_ed25519.pub ]; then
-    YC_SSH_PUBLIC_KEY=$(cat ~/.ssh/id_ed25519.pub)
+# Получить YC_SSH_PUBLIC_KEY
+if [ -f ~/.ssh/id_rsa.pub ]; then
+    YC_SSH_PUBLIC_KEY=$(cat ~/.ssh/id_rsa.pub)
 else
-    echo -e "${YELLOW}Warning: ~/.ssh/id_ed25519.pu not found. Please provide SSH public key manually.${NC}"
-    YC_SSH_PUBLIC_KEY=""
+    echo -e "${YELLOW}Warning: ~/.ssh/id_rsa.pub not found. Using placeholder.${NC}"
+    YC_SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
 fi
 
-# Получить MLFLOW_TRACKING_URI из Kubernetes
+# Получить MLFLOW_TRACKING_URI
 echo -e "${YELLOW}Waiting for MLflow service to be ready...${NC}"
-# Подождать, пока service получит external IP
+MLFLOW_IP=""
 for i in {1..30}; do
     MLFLOW_IP=$(kubectl get svc -n mlops mlflow -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-    if [ ! -z "$MLFLOW_IP" ] && [ "$MLFLOW_IP" != "<pending>" ]; then
+    if [ -n "$MLFLOW_IP" ] && [ "$MLFLOW_IP" != "<pending>" ]; then
         break
     fi
     echo -n "."
@@ -51,8 +54,14 @@ fi
 
 echo -e "${GREEN}MLflow tracking URI: ${MLFLOW_TRACKING_URI}${NC}"
 
-# Создать variables.json
-cat > variables.json <<EOF
+# Проверка обязательных переменных
+if [ -z "$DP_SA_JSON" ] || [ "$DP_SA_JSON" = "null" ]; then
+    echo -e "${RED}Error: DP_SA_JSON is empty. Make sure terraform output exists.${NC}"
+    exit 1
+fi
+
+# Создание variables.json (правильный JSON формат)
+cat > variables.json << EOF
 {
   "YC_ZONE": "${YC_ZONE}",
   "YC_FOLDER_ID": "${YC_FOLDER_ID}",
@@ -66,6 +75,18 @@ cat > variables.json <<EOF
 }
 EOF
 
-echo -e "${GREEN}variables.json created successfully!${NC}"
-echo -e "${GREEN}Content:${NC}"
-cat variables.json | jq .
+# Проверить, что файл валидный
+if command -v jq &> /dev/null; then
+    if jq empty variables.json 2>/dev/null; then
+        echo -e "${GREEN}variables.json created successfully! (valid JSON)${NC}"
+    else
+        echo -e "${RED}Error: Generated variables.json is not valid JSON${NC}"
+        cat variables.json
+        exit 1
+    fi
+else
+    echo -e "${GREEN}variables.json created successfully!${NC}"
+fi
+
+echo -e "${YELLOW}File content preview:${NC}"
+head -15 variables.json
