@@ -1,4 +1,4 @@
-.PHONY: help init plan apply destroy clean kubeconfig status check-nodes generate-secret save-outputs upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket deploy-to-s3
+.PHONY: help init plan apply destroy clean kubeconfig status check-nodes generate-secret save-outputs upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket deploy-to-s3 generate-variables
 .PHONY: deploy deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
 .PHONY: deploy-force status-apps urls delete-apps upload-data list-data
 
@@ -17,7 +17,9 @@ help:
 	@echo "  upload-data-to-bucket   - Upload data to S3"
 	@echo "  upload-src-to-bucket    - Upload src to S3"
 	@echo "  deploy-to-s3            - Upload all to S3"
-	@echo "  make list-data     - List data in S3"
+	@echo "  make list-data          - List data in S3"
+	@echo "  make generate-variables - Generate variables to airflow"
+
 	@echo ""
 	@echo "Deploy commands:"
 	@echo "  make deploy        - Deploy all applications"
@@ -161,6 +163,15 @@ deploy-to-s3: upload-venv-to-bucket upload-data-to-bucket upload-src-to-bucket
 	@echo "All artifacts (venv, data, src) uploaded to S3!"
 
 
+# ========== AIRFLOW VARIABLES ==========
+
+generate-variables:
+	@echo "$(YELLOW)Generating variables.json for Airflow...$(NC)"
+	@chmod +x scripts/generate_variables.sh
+	@./scripts/generate_variables.sh
+
+# ========== DEPLOY SERVICES ==========
+
 deploy: deploy-namespace deploy-secret deploy-postgres deploy-mlflow deploy-airflow
 	@echo "✅ All applications deployed successfully!"
 	@$(MAKE) status-apps
@@ -239,3 +250,5 @@ delete-apps:
 	kubectl delete service airflow -n mlops --ignore-not-found
 	kubectl delete secret s3-credentials -n mlops --ignore-not-found
 	@echo "✅ All applications deleted"
+
+

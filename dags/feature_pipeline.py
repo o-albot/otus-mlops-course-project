@@ -13,18 +13,29 @@ from airflow.providers.yandex.operators.dataproc import (
 )
 from airflow.models import Variable
 from airflow.utils.trigger_rule import TriggerRule
+import os
 
-# ========== VARIABLES (set in Airflow UI) ==========
+# ========== VARIABLES ==========
+# Из Airflow Variables (импортированных из variables.json)
 YC_ZONE = Variable.get("YC_ZONE")
 YC_FOLDER_ID = Variable.get("YC_FOLDER_ID")
 YC_SUBNET_ID = Variable.get("YC_SUBNET_ID")
 YC_SSH_PUBLIC_KEY = Variable.get("YC_SSH_PUBLIC_KEY")
-S3_BUCKET_NAME = Variable.get("S3_BUCKET_NAME")
-S3_ENDPOINT_URL = Variable.get("S3_ENDPOINT_URL")
-S3_ACCESS_KEY = Variable.get("S3_ACCESS_KEY")
-S3_SECRET_KEY = Variable.get("S3_SECRET_KEY")
 DP_SA_ID = Variable.get("DP_SA_ID")
+DP_SA_AUTH_KEY_PUBLIC_KEY = Variable.get("DP_SA_AUTH_KEY_PUBLIC_KEY")
+DP_SA_JSON = Variable.get("DP_SA_JSON")
+DP_SECURITY_GROUP_ID = Variable.get("DP_SECURITY_GROUP_ID")
 MLFLOW_TRACKING_URI = Variable.get("MLFLOW_TRACKING_URI")
+
+# Из Kubernetes Secret (автоматически доступны как переменные окружения)
+S3_BUCKET_NAME = os.environ.get("S3_BUCKET")
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT")
+
+# Проверка обязательных переменных
+if not S3_BUCKET_NAME:
+    raise ValueError("S3_BUCKET environment variable not set. Check K8s secret.")
+if not S3_ENDPOINT_URL:
+    raise ValueError("S3_ENDPOINT environment variable not set. Check K8s secret.")
 
 # Connection ID for Yandex Cloud (create in Airflow UI)
 YC_SA_CONNECTION_ID = "yc_sa_connection"
@@ -40,16 +51,16 @@ S3_DP_LOGS = f"s3a://{S3_BUCKET_NAME}/airflow_logs/"
 # MLflow
 MLFLOW_EXPERIMENT_NAME = "feature_pipeline"
 
-# Spark properties
+# Spark properties (без явных ключей — используется IAM сервисного аккаунта)
 SPARK_PROPERTIES = {
     'spark.submit.deployMode': 'cluster',
     'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
     'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python3',
     'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python3',
     'spark.sql.adaptive.enabled': 'true',
+    'spark.sql.adaptive.coalescePartitions.enabled': 'true',
     'spark.hadoop.fs.s3a.endpoint': S3_ENDPOINT_URL,
-    'spark.hadoop.fs.s3a.access.key': S3_ACCESS_KEY,
-    'spark.hadoop.fs.s3a.secret.key': S3_SECRET_KEY,
+    # IAM сервисного аккаунта даёт доступ к S3, ключи не нужны
 }
 
 # ========== DAG DEFAULTS ==========
@@ -74,7 +85,12 @@ dag = DAG(
     tags=['feature', 'preprocessing', 'mlops'],
 )
 
-start = DummyOperator(task_id="start", dag=dag)
+# ========== TASKS ==========
+
+start = DummyOperator(
+    task_id="start",
+    dag=dag,
+)
 
 create_cluster = DataprocCreateClusterOperator(
     task_id="create_dataproc_cluster",
@@ -123,7 +139,11 @@ delete_cluster = DataprocDeleteClusterOperator(
     dag=dag,
 )
 
-end = DummyOperator(task_id="end", trigger_rule=TriggerRule.ALL_DONE, dag=dag)
+end = DummyOperator(
+    task_id="end",
+    trigger_rule=TriggerRule.ALL_DONE,
+    dag=dag,
+)
 
-# Dependencies
+# ========== DEPENDENCIES ==========
 start >> create_cluster >> preprocess >> delete_cluster >> end
